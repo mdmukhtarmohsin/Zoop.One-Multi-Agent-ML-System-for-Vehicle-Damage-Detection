@@ -65,10 +65,6 @@ This model runs concurrently to identify all visible vehicle components, providi
 
 The outputs of these two models are then intelligently combined by the `PartIdentificationAgent` to create a precise map of which damages occurred on which parts.
 
-## 🏗️ System Architecture
-
-The system is designed as a stateful graph where each node represents an agent performing a specific task. The state (data) flows through the graph, being enriched at each step.
-
 ## 🚀 Getting Started
 
 Follow these instructions to set up and run the project on your local machine.
