@@ -12,3 +12,5 @@ Pillow>=9.0.0
 
 # Type Hinting Compatibility
 typing-extensions>=4.8.0
+
+ultralytics

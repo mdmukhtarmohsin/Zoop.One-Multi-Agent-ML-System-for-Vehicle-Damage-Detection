@@ -4,15 +4,15 @@ from .graph_state import GraphState
 
 # Import the mock agents
 from agents.image_quality_agent import MockImageQualityAgent
-from agents.damage_detection_agent import MockDamageDetectionAgent
-from agents.part_identification_agent import MockPartIdentificationAgent
+from agents.damage_detection_agent import DamageDetectionAgent
+from agents.part_identification_agent import PartIdentificationAgent
 from agents.severity_assessment_agent import MockSeverityAssessmentAgent
 
 # --- 1. Instantiate Agents ---
 # Create a single instance of each agent to be used throughout the graph.
 quality_agent = MockImageQualityAgent()
-detection_agent = MockDamageDetectionAgent()
-part_agent = MockPartIdentificationAgent()
+detection_agent = DamageDetectionAgent()
+part_agent = PartIdentificationAgent()
 severity_agent = MockSeverityAssessmentAgent()
 
 # --- 2. Define Graph Nodes ---

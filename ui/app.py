@@ -2,114 +2,130 @@ import gradio as gr
 import time
 import uuid
 import json
-from PIL import Image
 
-# Import the compiled LangGraph orchestrator and the state definition
 from orchestrator.damage_assessment_graph import damage_assessment_graph, GraphState
-from ui.utils import draw_annotations
+# Import all three drawing utilities now
+from ui.utils import draw_annotations, draw_raw_detection_boxes, draw_part_assignments
 
-def process_damage_claim(image_upload):
+def process_damage_claim(image_path, progress=gr.Progress(track_tqdm=True)):
     """
-    The main function that processes the user's request. It streams the
-    pipeline's progress back to the Gradio UI.
+    Main processing function that streams step-by-step updates to the UI.
     """
-    if image_upload is None:
-        yield {
-            status_textbox: gr.update(value="Please upload an image first.", visible=True),
+    if image_path is None:
+        gr.Warning("Please upload an image first!")
+        return {
+            quality_output_group: gr.update(visible=False),
+            damage_output_group: gr.update(visible=False),
+            parts_output_group: gr.update(visible=False),
+            final_report_group: gr.update(visible=False),
         }
-        return
 
-    claim_id = f"CLM-{str(uuid.uuid4())[:8].upper()}"
-
-    # --- Initial State for the Graph ---
-    initial_state = GraphState(
-        claim_id=claim_id,
-        image_path=image_upload,
-        processing_log=[],
-        error_message=None,
-        quality_check_result=None,
-        damage_detection_result=None,
-        part_identification_result=None,
-        severity_assessment_result=None,
-        final_report=None
-    )
-
-    # --- Stream the Graph Execution ---
-    # This allows us to get real-time updates from the orchestrator.
-    final_state = None
-    for state_update in damage_assessment_graph.stream(initial_state):
-        # The key of the dictionary is the name of the node that just ran
-        node_name = list(state_update.keys())[0]
-        node_output = state_update[node_name]
-        
-        # Update the UI with the latest processing log
-        log_message = "\n".join(node_output['processing_log'])
-        yield {
-            status_textbox: gr.update(value=log_message, visible=True),
-            # Clear previous results while processing
-            annotated_image: gr.update(value=None),
-            report_json: gr.update(value=None)
-        }
-        final_state = node_output # Keep track of the latest full state
-        time.sleep(0.5) # Add a small delay for better UX
-
-    # --- Final Update after Processing is Complete ---
-    final_report = final_state.get('final_report', {})
-    
-    # Draw annotations on the image
-    annotated_img_array = draw_annotations(image_upload, final_report)
-    
-    # Convert the final report dictionary to a formatted JSON string for display
-    report_str = json.dumps(final_report, indent=2)
-
+    # --- 1. Reset UI for a new run ---
     yield {
-        status_textbox: gr.update(value=final_state['processing_log'][-1]), # Show final status
-        annotated_image: gr.update(value=annotated_img_array, visible=True),
-        report_json: gr.update(value=report_str, visible=True)
+        quality_output_group: gr.update(visible=False),
+        damage_output_group: gr.update(visible=False),
+        parts_output_group: gr.update(visible=False),
+        final_report_group: gr.update(visible=False),
     }
 
+    claim_id = f"CLM-{str(uuid.uuid4())[:8].upper()}"
+    initial_state = GraphState(
+        claim_id=claim_id, image_path=image_path, processing_log=[],
+        error_message=None, quality_check_result=None, damage_detection_result=None,
+        part_identification_result=None, severity_assessment_result=None, final_report=None
+    )
 
-# --- Build the Gradio Interface ---
+    # --- 2. Stream the graph and update UI at each step ---
+    final_state = None
+    for state_update in damage_assessment_graph.stream(initial_state):
+        node_name = list(state_update.keys())[0]
+        node_output = state_update[node_name]
+        final_state = node_output
+
+        if node_name == 'quality_check':
+            qc_result = node_output['quality_check_result']
+            status_text = f"Quality Score: {qc_result['quality_score']}\nProcessable: {qc_result['processable']}\nIssues: {qc_result['issues'] or 'None'}"
+            yield {quality_status: gr.update(value=status_text), quality_output_group: gr.update(visible=True)}
+            if not qc_result['processable']:
+                gr.Error("Image quality too low. Process halted.")
+                break
+
+        elif node_name == 'damage_detection':
+            dd_result = node_output['damage_detection_result']
+            annotated_img = draw_raw_detection_boxes(image_path, dd_result)
+            yield {
+                damage_annotated_image: gr.update(value=annotated_img),
+                damage_raw_json: gr.update(value=dd_result),
+                damage_output_group: gr.update(visible=True)
+            }
+
+        elif node_name == 'part_identification':
+            pi_result = node_output['part_identification_result']
+            # --- NEW: Call the new drawing function for this step ---
+            part_assignment_img = draw_part_assignments(image_path, pi_result)
+            yield {
+                # --- NEW: Update the new image component ---
+                parts_annotated_image: gr.update(value=part_assignment_img),
+                parts_identified_json: gr.update(value=pi_result),
+                parts_output_group: gr.update(visible=True)
+            }
+        
+        elif node_name == 'compile_report':
+            final_report = node_output.get('final_report', {})
+            final_annotated_img = draw_annotations(image_path, final_report)
+            yield {
+                final_annotated_image: gr.update(value=final_annotated_img),
+                final_report_json: gr.update(value=final_report),
+                final_report_group: gr.update(visible=True)
+            }
+        
+        time.sleep(0.5)
+
+# --- Build the New Gradio Interface ---
 with gr.Blocks(theme=gr.themes.Soft(), title="Vehicle Damage Assessment") as demo:
-    gr.Markdown("# Multi-Agent ML System for Vehicle Damage Detection")
-    gr.Markdown("Upload an image of a damaged vehicle to see the automated assessment pipeline in action.")
+    gr.Markdown("# Multi-Agent Vehicle Damage Assessment")
+    gr.Markdown("Upload an image to see the step-by-step analysis pipeline.")
 
     with gr.Row():
         with gr.Column(scale=1):
-            # Input components
             input_image = gr.Image(type="filepath", label="Upload Vehicle Image")
             submit_button = gr.Button("Assess Damage", variant="primary")
-            
-            gr.Markdown("---")
-            status_textbox = gr.Textbox(
-                label="Processing Status", 
-                lines=6, 
-                interactive=False, 
-                visible=True,
-                placeholder="Pipeline progress will be shown here..."
-            )
-
         with gr.Column(scale=2):
-            # Output components
-            with gr.Row():
-                original_image_display = gr.Image(label="Original Image", interactive=False)
-                annotated_image = gr.Image(label="Annotated Damage", interactive=False)
-            
-            report_json = gr.JSON(label="Assessment Report", visible=True)
+            original_image_display = gr.Image(label="Original Image", interactive=False)
+    
+    input_image.change(fn=lambda x: x, inputs=input_image, outputs=original_image_display)
 
-    # --- Event Handling ---
-    # When the button is clicked, run the processing function
+    with gr.Accordion("Step 1: Image Quality Check", open=False) as quality_output_group:
+        quality_status = gr.Textbox(label="Quality Assessment", interactive=False)
+    
+    with gr.Accordion("Step 2: Damage Detection (YOLO)", open=False) as damage_output_group:
+        with gr.Row():
+            damage_annotated_image = gr.Image(label="Detected Damage Areas")
+            damage_raw_json = gr.JSON(label="Raw Detection Output")
+
+    # --- NEW: Add an Image component to the Step 3 Accordion ---
+    with gr.Accordion("Step 3: Damaged Part Identification (YOLO + IoU)", open=False) as parts_output_group:
+        with gr.Row():
+            parts_annotated_image = gr.Image(label="Damage Mapped to Parts")
+            parts_identified_json = gr.JSON(label="Mapping Output")
+
+    with gr.Accordion("Step 4: Final Assessment & Report", open=False) as final_report_group:
+        with gr.Row():
+            final_annotated_image = gr.Image(label="Final Annotated Image")
+            final_report_json = gr.JSON(label="Comprehensive Report")
+
+    # --- NEW: Add the new component to the list of all outputs ---
+    all_outputs = [
+        quality_status, quality_output_group,
+        damage_annotated_image, damage_raw_json, damage_output_group,
+        parts_annotated_image, parts_identified_json, parts_output_group,
+        final_annotated_image, final_report_json, final_report_group
+    ]
+
     submit_button.click(
         fn=process_damage_claim,
         inputs=[input_image],
-        outputs=[status_textbox, annotated_image, report_json]
-    )
-
-    # Also display the original image in the output panel upon upload
-    input_image.change(
-        fn=lambda x: x, 
-        inputs=input_image, 
-        outputs=original_image_display
+        outputs=all_outputs
     )
 
 if __name__ == "__main__":
