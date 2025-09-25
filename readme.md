@@ -26,6 +26,49 @@ The system is designed as a stateful graph where each node represents an agent p
 *   **Agents**: Self-contained Python classes responsible for a single task. Currently, the Damage and Part agents use real ML models, while Quality and Severity are mock implementations.
 *   **User Interface (Gradio)**: A web-based dashboard that allows for image uploads and visualizes the entire process in real-time.
 
+## 🧠 Custom ML Models
+
+The core intelligence of this system comes from two YOLOv8 models that have been specifically fine-tuned for the vehicle damage assessment task.
+
+### 1. `damage_detection_yolo.pt` (Damage Detection Model)
+
+This model is the first step in the analysis pipeline. It is responsible for identifying and classifying all visible damages on the vehicle.
+
+*   **Task**: Object Detection
+*   **Architecture**: YOLOv8
+*   **Purpose**: To draw bounding boxes around damaged areas.
+*   **Classes**: It has been trained to recognize **11 distinct types of damage**, including:
+    - `car-part-crack`
+    - `detachment`
+    - `glass-crack`
+    - `lamp-crack`
+    - `minor-deformation`
+    - `scratches`
+    - `flat-tire`
+    - ...and more.
+
+### 2. `part_detection_yolo.pt` (Part Identification Model)
+
+This model runs concurrently to identify all visible vehicle components, providing the spatial context needed to locate the damage.
+
+*   **Task**: Object Detection
+*   **Architecture**: YOLOv8
+*   **Purpose**: To draw bounding boxes around individual car parts.
+*   **Classes**: It has been trained to recognize **23 different vehicle parts**, including:
+    - `back_bumper`
+    - `front_door`
+    - `back_left_light`
+    - `hood`
+    - `wheel`
+    - `left_mirror`
+    - ...and more.
+
+The outputs of these two models are then intelligently combined by the `PartIdentificationAgent` to create a precise map of which damages occurred on which parts.
+
+## 🏗️ System Architecture
+
+The system is designed as a stateful graph where each node represents an agent performing a specific task. The state (data) flows through the graph, being enriched at each step.
+
 ## 🚀 Getting Started
 
 Follow these instructions to set up and run the project on your local machine.
