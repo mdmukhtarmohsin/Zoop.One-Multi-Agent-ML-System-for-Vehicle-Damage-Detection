@@ -53,23 +53,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Model Setup
-
-This system requires two pre-trained YOLO model files (`.pt`).
-
-**Place your trained models in the project's root directory** with the following exact filenames:
-
-*   `damage_detection_yolo.pt`: Your model trained to detect different types of damage.
-*   `part_detection_yolo.pt`: Your model trained to detect vehicle parts.
-
-### 3. Configure Class Maps
-
-Your models have specific class names and indices. You **must** update the Python dictionaries in the agent files to match your models for the system to work correctly.
-
-*   **For Damage Detection**: Open `agents/damage_detection_agent.py` and update the `MODEL_DAMAGE_CLASS_MAP` dictionary.
-*   **For Part Identification**: Open `agents/part_identification_agent.py` and update the `PART_CLASS_MAP` dictionary.
-
-### 4. Running the Application
+### 3. Running the Application
 
 Once the installation and model setup are complete, you can launch the Gradio web application.
 
